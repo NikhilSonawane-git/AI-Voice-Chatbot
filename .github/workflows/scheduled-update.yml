@@ -1,0 +1,38 @@
+name: Scheduled Repo Update
+
+on:
+  schedule:
+    # Runs once daily at 03:30 UTC (9:00 AM IST)
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-repo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update a tracked file
+        run: |
+          date -u "+Last updated: %Y-%m-%d %H:%M UTC" >> activity.log
+
+      - name: Commit and push only if changes exist
+        env:
+          GIT_AUTHOR_NAME: "Nikhil Sonawane"
+          GIT_AUTHOR_EMAIL: "nikhilss0701@gmail.com"
+          GIT_COMMITTER_NAME: "Nikhil Sonawane"
+          GIT_COMMITTER_EMAIL: "nikhilss0701@gmail.com"
+        run: |
+          git config user.name "$GIT_AUTHOR_NAME"
+          git config user.email "$GIT_AUTHOR_EMAIL"
+          git add .
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: scheduled repository update"
+            git push
+          else
+            echo "No changes detected."
+          fi
