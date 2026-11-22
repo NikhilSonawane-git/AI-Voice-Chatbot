@@ -15,10 +15,54 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Update a tracked file
+      - name: Generate repository summary
         run: |
-          date -u "+Last updated: %Y-%m-%d %H:%M UTC" >> activity.log
+          python3 - << 'EOF'
+          import os
+          import subprocess
+
+          ignore_dirs = {".git", "node_modules", ".github", "__pycache__"}
+          total_files = 0
+          total_lines = 0
+          ext_counts = {}
+
+          for root, dirs, files in os.walk("."):
+              dirs[:] = [d for d in dirs if d not in ignore_dirs]
+              for f in files:
+                  path = os.path.join(root, f)
+                  total_files += 1
+                  ext = os.path.splitext(f)[1].lower() or "(no ext)"
+                  ext_counts[ext] = ext_counts.get(ext, 0) + 1
+                  try:
+                      with open(path, "r", encoding="utf-8", errors="ignore") as fp:
+                          total_lines += sum(1 for _ in fp)
+                  except OSError:
+                      pass
+
+          commit_count = subprocess.check_output(
+              ["git", "rev-list", "--count", "HEAD"], text=True
+          ).strip()
+
+          lines = [
+              "# Repository Snapshot",
+              "",
+              "Automatically maintained by GitHub Actions whenever repository stats change.",
+              "",
+              f"- **Total Tracked Files:** {total_files}",
+              f"- **Total Lines (approx.):** {total_lines}",
+              f"- **Total Commits on Branch:** {commit_count}",
+              "",
+              "## Files by Extension",
+          ]
+          for ext in sorted(ext_counts):
+              lines.append(f"- `{ext}`: {ext_counts[ext]}")
+
+          with open("REPO_SUMMARY.md", "w", encoding="utf-8") as out:
+              out.write("\n".join(lines) + "\n")
+          EOF
 
       - name: Commit and push only if changes exist
         env:
@@ -29,10 +73,10 @@ jobs:
         run: |
           git config user.name "$GIT_AUTHOR_NAME"
           git config user.email "$GIT_AUTHOR_EMAIL"
-          git add .
+          git add REPO_SUMMARY.md
           if ! git diff --staged --quiet; then
-            git commit -m "chore: scheduled repository update"
+            git commit -m "docs: refresh repository snapshot"
             git push
           else
-            echo "No changes detected."
+            echo "No changes to REPO_SUMMARY.md."
           fi
